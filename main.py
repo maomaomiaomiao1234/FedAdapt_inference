@@ -23,6 +23,12 @@ split_layer={0:[1,2],1:[3,4],2:[5,6]}
 
 reverse_split_layer={1:0,2:0,3:1,4:1,5:2,6:2}
 
+host_port=1997
+host_node_num=0
+host_ip=CLIENTS_CONFIG[host_node_num]
+
+info = "MSG_FROM_NODE(%d), host= %s" %(host_node_num, host_ip)
+
 ### 假设本节点为节点0
 class node_end(Communicator):
     def __init__(self,node_num,ip_address):
@@ -31,11 +37,10 @@ class node_end(Communicator):
     def add_addr(self,node_addr,node_port):
         self.sock.connect((node_addr,node_port))
 
+
 def start_inference():
-    host_node_num=0
     include_first=True
     node= node_end(host_node_num)
-
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
     # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
     model= VGG('Unit', 'VGG5', 0, model_cfg)
@@ -67,18 +72,26 @@ def start_inference():
                 data = layer_i(data)
 
             # TODO:modify the port
-            node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 6666)           
+            node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 1997)           
 
-            info = "MSG_FROM_NODE(%d), host= %s, port= %d" %(host_node_num, CLIENTS_LIST[reverse_split_layer[split+1]], 6666)
 
             # TODO:是否发送labels
             msg=[info,data.cpu().state_dict()]
             node.send_msg(node.sock, msg)            
             include_first=False
-    node_inference(node)
+    node_inference(node,layer_weight)
 
-def node_inference(node):
-        while(1):
-            node.recv_msg(node.sock, 'Finish')
+def node_inference(node,layer_weight):
+    while(1):
+        node_socket,node_addr = node.wait_for_connection(host_ip,host_port)
+        msg=node.recv_msg(node_socket)
+        print(msg[0])
 
-            node.send_msg(node.sock, ('Finish', 'Finish'))
+        data=msg[1]
+        for split in split_layer[host_node_num]:
+            layer_i=layer_weight[split].cuda()
+            data=layer_i(data)
+
+        node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 1997)
+        msg=[info,data.cpu().state_dict()]
+        node.send_msg(node.sock, msg)

@@ -14,6 +14,11 @@ class Communicator(object):
 		self.ip = ip_address
 		self.sock = socket.socket()
 
+	def wait_for_connection(self,host_ip,host_port):
+		self.sock.bind((host_ip,host_port))  # Bind the socket to a specific address and port
+		self.sock.listen()  # Enable the server to accept connections
+		node_sock, node_address = self.sock.accept()  # Wait for a client to connect
+		return node_sock, node_address
 
 	def send_msg(self, sock, msg):
 		msg_pickle = pickle.dumps(msg)
