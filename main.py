@@ -29,6 +29,10 @@ host_ip=CLIENTS_CONFIG[host_node_num]
 
 info = "MSG_FROM_NODE(%d), host= %s" %(host_node_num, host_ip)
 
+loss_list=[]
+
+model_name='VGG5'
+
 ### 假设本节点为节点0
 class node_end(Communicator):
     def __init__(self,node_num,ip_address):
@@ -37,14 +41,36 @@ class node_end(Communicator):
     def add_addr(self,node_addr,node_port):
         self.sock.connect((node_addr,node_port))
 
+def node_inference(node,layer_weight):
+    while(1):
+        node_socket,node_addr = node.wait_for_connection(host_ip,host_port)
+        msg=node.recv_msg(node_socket)
+        print(msg[0])
+
+        data=msg[1]
+        target=msg[2]
+        for split in split_layer[host_node_num]:
+            layer_i=layer_weight[split].cuda()
+            data=layer_i(data)
+
+        if split+1 <len(CLIENTS_LIST):
+            node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 1997)
+            msg=[info,data.cpu().state_dict(),target.cpu()]
+            node.send_msg(node.sock, msg)
+        else:
+            # 到达最后一层，计算损失
+            loss = torch.nn.functional.cross_entropy(data, target)
+            loss_list.append(loss)  
+            print("loss :{}".format(sum(loss_list)/len(loss_list)))
 
 def start_inference():
     include_first=True
     node= node_end(host_node_num)
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
     # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
-    model= VGG('Unit', 'VGG5', 0, model_cfg)
-    model.load_state_dict(torch.load('model.pth'))
+    # model= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
+    model= VGG('Client', model_name, 7, model_cfg)
+    model.load_state_dict('model.pth')
     layer_weight=[]
     for layer in model.layers:
         weight=layer.weight
@@ -74,24 +100,8 @@ def start_inference():
             # TODO:modify the port
             node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 1997)           
 
-
             # TODO:是否发送labels
-            msg=[info,data.cpu().state_dict()]
+            msg=[info,data.cpu().state_dict(),target.cpu()]
             node.send_msg(node.sock, msg)            
             include_first=False
     node_inference(node,layer_weight)
-
-def node_inference(node,layer_weight):
-    while(1):
-        node_socket,node_addr = node.wait_for_connection(host_ip,host_port)
-        msg=node.recv_msg(node_socket)
-        print(msg[0])
-
-        data=msg[1]
-        for split in split_layer[host_node_num]:
-            layer_i=layer_weight[split].cuda()
-            data=layer_i(data)
-
-        node.add_addr(CLIENTS_LIST[reverse_split_layer[split+1]], 1997)
-        msg=[info,data.cpu().state_dict()]
-        node.send_msg(node.sock, msg)
