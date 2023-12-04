@@ -25,7 +25,7 @@ reverse_split_layer={1:0,2:0,3:1,4:1,5:2,6:2}
 
 host_port=1997
 host_node_num=0
-host_ip=CLIENTS_CONFIG[host_node_num]
+host_ip=CLIENTS_LIST[host_node_num]
 
 info = "MSG_FROM_NODE(%d), host= %s" %(host_node_num, host_ip)
 
@@ -35,8 +35,8 @@ model_name='VGG5'
 
 ### 假设本节点为节点0
 class node_end(Communicator):
-    def __init__(self,node_num,ip_address):
-        super(node_end,self).__init__(node_num,ip_address)
+    def __init__(self,node_num):
+        super(node_end,self).__init__(node_num)
         self.node_num=node_num
     def add_addr(self,node_addr,node_port):
         self.sock.connect((node_addr,node_port))
@@ -50,7 +50,7 @@ def node_inference(node,layer_weight):
         data=msg[1]
         target=msg[2]
         for split in split_layer[host_node_num]:
-            layer_i=layer_weight[split].cuda()
+            layer_i=layer_weight[split]
             data=layer_i(data)
 
         if split+1 <len(CLIENTS_LIST):
@@ -69,8 +69,8 @@ def start_inference():
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
     # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
     # model= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
-    model= VGG('Client', model_name, 7, model_cfg)
-    model.load_state_dict('model.pth')
+    model= VGG('Client', model_name, 6, model_cfg)
+    model.load_state_dict(torch.load('model_weights.pth'))
     layer_weight=[]
     for layer in model.layers:
         weight=layer.weight
@@ -91,10 +91,10 @@ def start_inference():
         )
         test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=4)
         for data, target in test_loader:
-            data, target = data.cuda(), target.cuda()
+            #data, target = data.cuda(), target.cuda()
             for split in split_layer[host_node_num]:
                 # TODO:如果节点上的层不相邻，需要兼容
-                layer_i=layer_weight[split].cuda()
+                layer_i=layer_weight[split]
                 data = layer_i(data)
 
             # TODO:modify the port
@@ -105,3 +105,5 @@ def start_inference():
             node.send_msg(node.sock, msg)            
             include_first=False
     node_inference(node,layer_weight)
+
+start_inference()

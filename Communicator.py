@@ -9,9 +9,8 @@ logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(le
 logger = logging.getLogger(__name__)
 
 class Communicator(object):
-	def __init__(self, index, ip_address):
+	def __init__(self, index):
 		self.index = index
-		self.ip = ip_address
 		self.sock = socket.socket()
 
 	def wait_for_connection(self,host_ip,host_port):
