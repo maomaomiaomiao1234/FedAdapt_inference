@@ -31,8 +31,8 @@ split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
 
 reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
 
-host_port = 1997
-host_node_num = 0
+host_port = 1999
+host_node_num = 2
 host_ip = CLIENTS_LIST[host_node_num]
 
 info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
@@ -44,8 +44,7 @@ model_len = len(model_cfg[model_name])
 
 N = 10000 # data length
 B = 256 # Batch size
-
-### 假设本节点为节点0
+### 假设本节点为节点2
 class node_end(Communicator):
     def __init__(self):
         super(node_end, self).__init__()
@@ -61,14 +60,13 @@ class node_end(Communicator):
 
 
 def node_inference(node, model):
-    while True:
+    while 1:
         last_send_ips=[]
         iteration = int(N / B)
         node_socket, node_addr = node.wait_for_connection(host_ip, host_port)
         for i in range(iteration):
-            print("node{host_node_num} get connection from node{node_addr}")
+            print(f"node{host_node_num} get connection from node{node_addr}")
             msg = node.recv_msg(node_socket)
-            # print(msg[0])
             data = msg[1]
             target = msg[2]
             start_layer = msg[3]
@@ -76,9 +74,9 @@ def node_inference(node, model):
             if split + 1 < model_len:
                 last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
                 if last_send_ip not in last_send_ips:
-                    node.add_addr(last_send_ip, 1998)
+                    node.add_addr(last_send_ip, 2000)
                 last_send_ips.append(last_send_ip)
-                msg = [info, data.cpu().state_dict(), target.cpu(), next_layer]
+                msg = [info, data.cpu(), target.cpu(), next_layer]
                 node.send_msg(node.sock, msg)
                 print(
                     f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
@@ -90,6 +88,7 @@ def node_inference(node, model):
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
         node_socket.close()
 
+
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
     # for name, module in model.named_children():
     #   print(f"Name: {name} | Module: {module}")
@@ -100,7 +99,6 @@ def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
         feature_s.append(model.features[start_layer])
         start_layer += 1
     if type == "D":
-        ## TODO:denses' modify the start_layer
         dense_s.append(model.denses[start_layer-11])
         start_layer += 1
     if type == "C":
@@ -119,6 +117,7 @@ def calculate_output(model, data, start_layer):
         out_channels = model_cfg[model_name][split][2]
         kernel_size = model_cfg[model_name][split][3]
         # print("type,in_channels,out_channels,kernel_size",type,in_channels,out_channels,kernel_size)
+        #print("start_layer", start_layer)
         features, dense, next_layer = get_model(
             model, type, in_channels, out_channels, kernel_size, start_layer
         )
@@ -127,6 +126,10 @@ def calculate_output(model, data, start_layer):
         else:
             model_layer = dense
 
+        #print("data", data.shape)
+        #print("model_layer", model_layer)
+        if type=="D":
+            data = data.view(data.size(0), -1)
         data = model_layer(data)
         start_layer = next_layer
         #print("next_layer", next_layer)
@@ -134,7 +137,7 @@ def calculate_output(model, data, start_layer):
 
 
 def start_inference():
-    include_first = True
+    include_first = False
     node = node_end()
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
     # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
@@ -144,7 +147,7 @@ def start_inference():
     model.load_state_dict(torch.load("model.pth"))
 
     # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    #print("moddel layer",model)
+    # print("moddel layer",model)
 
     # 如果含第一层，载入数据
     if include_first:
@@ -163,7 +166,10 @@ def start_inference():
         test_loader = DataLoader(
             test_dataset, batch_size=256, shuffle=False, num_workers=4
         )
-
+        # TODO:modify the port
+        split0=max(split_layer[host_node_num])
+        print("split0",split0)
+        node.add_addr(CLIENTS_LIST[reverse_split_layer[split0 + 1]], 1998)
         last_send_ips=[] 
         for data, target in test_loader:
             #print(len(data))
@@ -174,8 +180,7 @@ def start_inference():
             # TODO:modify the port
             last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
             if last_send_ip not in last_send_ips:
-                node.add_addr(last_send_ip, 1998)
-
+                node.add_addr(last_send_ip, 2000)
             last_send_ips.append(last_send_ip)
 
             # TODO:是否发送labels
@@ -185,6 +190,7 @@ def start_inference():
             )
             node.send_msg(node.sock, msg)
             include_first = False
+
     node_inference(node, model)
 
 

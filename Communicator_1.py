@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 class Communicator(object):
 	def __init__(self):
 		self.sock = socket.socket()
-		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
 
 	def wait_for_connection(self,host_ip,host_port):
 		self.sock.bind((host_ip,host_port))  # Bind the socket to a specific address and port
