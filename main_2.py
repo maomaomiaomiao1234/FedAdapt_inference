@@ -38,6 +38,7 @@ host_ip = CLIENTS_LIST[host_node_num]
 info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
 
 loss_list = []
+acc_list = []
 
 model_name = "VGG5"
 model_len = len(model_cfg[model_name])
@@ -46,8 +47,8 @@ N = 10000 # data length
 B = 256 # Batch size
 ### 假设本节点为节点2
 class node_end(Communicator):
-    def __init__(self):
-        super(node_end, self).__init__()
+    def __init__(self,host_ip,host_port):
+        super(node_end, self).__init__(host_ip,host_port)
 
     def add_addr(self, node_addr, node_port):
         while True:
@@ -58,12 +59,19 @@ class node_end(Communicator):
                 print(f"Failed to connect to {node_addr}:{node_port}, retrying...")
                 time.sleep(1)  # Wait for a while before retrying
 
+# TODO:理解这个函数
+def calculate_accuracy(fx, y):
+    preds = fx.max(1, keepdim=True)[1]
+    #print("preds={}, y.view_as(preds)={}".format(preds, y.view_as(preds)))
+    correct = preds.eq(y.view_as(preds)).sum()
+    acc = 100.00 * correct.float() / preds.shape[0]
+    return acc
 
 def node_inference(node, model):
     while 1:
         last_send_ips=[]
         iteration = int(N / B)
-        node_socket, node_addr = node.wait_for_connection(host_ip, host_port)
+        node_socket, node_addr = node.wait_for_connection()
         for i in range(iteration):
             print(f"node{host_node_num} get connection from node{node_addr}")
             msg = node.recv_msg(node_socket)
@@ -84,8 +92,13 @@ def node_inference(node, model):
             else:
                 # 到达最后一层，计算损失
                 loss = torch.nn.functional.cross_entropy(data, target)
+                acc = calculate_accuracy(data, target)
                 loss_list.append(loss)
-                print("loss :{}".format(sum(loss_list) / len(loss_list)))
+                acc_list.append(acc)
+
+        print("loss :{:.4}".format(sum(loss_list) / len(loss_list)))
+        print("acc :{:.4}%".format(sum(acc_list) / len(acc_list)))
+        
         node_socket.close()
 
 
@@ -138,7 +151,7 @@ def calculate_output(model, data, start_layer):
 
 def start_inference():
     include_first = False
-    node = node_end()
+    node = node_end(host_ip, host_port)
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
     # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
     # model= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
@@ -167,9 +180,6 @@ def start_inference():
             test_dataset, batch_size=256, shuffle=False, num_workers=4
         )
         # TODO:modify the port
-        split0=max(split_layer[host_node_num])
-        print("split0",split0)
-        node.add_addr(CLIENTS_LIST[reverse_split_layer[split0 + 1]], 1998)
         last_send_ips=[] 
         for data, target in test_loader:
             #print(len(data))

@@ -47,8 +47,8 @@ B = 256 # Batch size
 
 ### 假设本节点为节点0
 class node_end(Communicator):
-    def __init__(self):
-        super(node_end, self).__init__()
+    def __init__(self,host_ip,host_port):
+        super(node_end, self).__init__(host_ip,host_port)
 
     def add_addr(self, node_addr, node_port):
         while True:
@@ -60,15 +60,23 @@ class node_end(Communicator):
                 time.sleep(1)  # Wait for a while before retrying
 
 
+# TODO:理解这个函数
+def calculate_accuracy(fx, y):
+    preds = fx.max(1, keepdim=True)[1]
+    #print("preds={}, y.view_as(preds)={}".format(preds, y.view_as(preds)))
+    correct = preds.eq(y.view_as(preds)).sum()
+    acc = 100.00 * correct.float() / preds.shape[0]
+    return acc
+
+
 def node_inference(node, model):
-    while True:
+    #while True:
         last_send_ips=[]
         iteration = int(N / B)
-        node_socket, node_addr = node.wait_for_connection(host_ip, host_port)
+        node_socket, node_addr = node.wait_for_connection()
         for i in range(iteration):
-            print("node{host_node_num} get connection from node{node_addr}")
+            print("node_{host_node_num} get connection from node{node_addr}")
             msg = node.recv_msg(node_socket)
-            # print(msg[0])
             data = msg[1]
             target = msg[2]
             start_layer = msg[3]
@@ -81,13 +89,14 @@ def node_inference(node, model):
                 msg = [info, data.cpu().state_dict(), target.cpu(), next_layer]
                 node.send_msg(node.sock, msg)
                 print(
-                    f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                    f"node_{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
                 )
             else:
                 # 到达最后一层，计算损失
                 loss = torch.nn.functional.cross_entropy(data, target)
                 loss_list.append(loss)
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
+                print("")
         node_socket.close()
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
@@ -135,10 +144,7 @@ def calculate_output(model, data, start_layer):
 
 def start_inference():
     include_first = True
-    node = node_end()
-    # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
-    # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
-    # model= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
+    node = node_end(host_ip, host_port)
 
     model = VGG("Client", model_name, 6, model_cfg)
     model.load_state_dict(torch.load("model.pth"))

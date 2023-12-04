@@ -9,13 +9,13 @@ logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(le
 logger = logging.getLogger(__name__)
 
 class Communicator(object):
-	def __init__(self):
+	def __init__(self, host_ip, host_port):
 		self.sock = socket.socket()
 		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
-
-	def wait_for_connection(self,host_ip,host_port):
 		self.sock.bind((host_ip,host_port))  # Bind the socket to a specific address and port
 		print("host_ip:{}, host_port:{}".format(host_ip,host_port))
+
+	def wait_for_connection(self):
 		self.sock.listen()  # Enable the server to accept connections
 		node_sock, node_address = self.sock.accept()  # Wait for a client to connect
 		return node_sock, node_address
