@@ -97,6 +97,7 @@ def node_inference(node, model):
                 loss_list.append(loss)
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
         node_socket.close()
+        node.__init__(host_ip,host_port)
 
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):

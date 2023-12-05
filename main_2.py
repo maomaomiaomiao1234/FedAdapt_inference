@@ -100,6 +100,7 @@ def node_inference(node, model):
         print("acc :{:.4}%".format(sum(acc_list) / len(acc_list)))
         
         node_socket.close()
+        node.__init__(host_ip,host_port)
 
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):

@@ -70,7 +70,8 @@ def calculate_accuracy(fx, y):
 
 
 def node_inference(node, model):
-    #while True:
+    node.__init__(host_ip,host_port)
+    while True:
         last_send_ips=[]
         iteration = int(N / B)
         node_socket, node_addr = node.wait_for_connection()
@@ -98,6 +99,7 @@ def node_inference(node, model):
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
                 print("")
         node_socket.close()
+        node.__init__(host_ip,host_port)
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
     # for name, module in model.named_children():
@@ -191,6 +193,7 @@ def start_inference():
             )
             node.send_msg(node.sock, msg)
             include_first = False
+        node.sock.close()
     node_inference(node, model)
 
 
