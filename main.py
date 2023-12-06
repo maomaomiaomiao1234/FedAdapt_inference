@@ -149,6 +149,7 @@ def start_inference():
     node = node_end(host_ip, host_port)
 
     model = VGG("Client", model_name, 6, model_cfg)
+    model.eval()
     model.load_state_dict(torch.load("model.pth"))
 
     # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
@@ -165,6 +166,7 @@ def start_inference():
             transform=transforms.Compose(
                 [
                     transforms.ToTensor(),
+                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
                 ]
             ),
         )
